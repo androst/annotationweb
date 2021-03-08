@@ -8,7 +8,6 @@ urlpatterns = [
     path('', views.index, name='index'),
     path('datasets/', views.datasets, name='datasets'),
     path('add-image-sequence/<int:subject_id>/', views.add_image_sequence, name='add_image_sequence'),
-    path('add-key-frames/<int:image_sequence_id>/', views.add_key_frames, name='add_key_frames'),
     path('show_frame/<int:image_sequence_id>/<int:frame_nr>/<int:task_id>/', views.show_frame, name='show_frame'),
     path('new-dataset/', views.new_dataset, name='new_dataset'),
     path('delete-dataset/<int:dataset_id>/', views.delete_dataset, name='delete_dataset'),
@@ -28,15 +27,14 @@ urlpatterns = [
     path('import-options/<int:dataset_id>/<int:importer_index>/', views.import_options, name='import_options'),
     path('annotate/<int:task_id>/', views.annotate_next_image, name='annotate'),
     path('annotate/<int:task_id>/image/<int:image_id>/', views.annotate_image, name='annotate'),
+    path('select-key-frames/<int:task_id>/image/<int:image_id>/', views.select_key_frames, name='select_key_frames'),
 
     path('admin/', admin.site.urls),
     path('user/', include('user.urls')),
     path('classification/', include('classification.urls')),
-    path('segmentation/', include('segmentation.urls')),
     path('boundingbox/', include('boundingbox.urls')),
     path('landmark/', include('landmark.urls')),
     path('cardiac/', include('cardiac.urls')),
-    path('cardiac_landmark/', include('cardiac_landmark.urls')),
     path('spline-segmentation/', include('spline_segmentation.urls'))
 ]
 

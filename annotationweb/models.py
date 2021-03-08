@@ -38,20 +38,16 @@ class Label(models.Model):
 
 
 class Task(models.Model):
-    SEGMENTATION = 'segmentation'
     CLASSIFICATION = 'classification'
     BOUNDING_BOX = 'boundingbox'
     LANDMARK = 'landmark'
     CARDIAC_SEGMENTATION = 'cardiac_segmentation'
-    CARDIAC_LANDMARK = 'cardiac_landmark'
     SPLINE_SEGMENTATION = 'spline_segmentation'
     TASK_TYPES = (
         (CLASSIFICATION, 'Classification'),
-        (SEGMENTATION, 'Segmentation'),
         (BOUNDING_BOX, 'Bounding box'),
         (LANDMARK, 'Landmark'),
         (CARDIAC_SEGMENTATION, 'Cardiac segmentation'),
-        (CARDIAC_LANDMARK, 'Cardiac landmark'),
         (SPLINE_SEGMENTATION, 'Spline segmentation')
     )
 
@@ -72,13 +68,32 @@ class Task(models.Model):
     user = models.ManyToManyField(User)
     description = models.TextField(default='', blank=True)
     large_image_layout = models.BooleanField(default=False, help_text='Use a large image layout for annotation')
-    post_processing_method = models.CharField(default='', help_text='Name of post processing method to use', max_length=255)
+    post_processing_method = models.CharField(default='', help_text='Name of post processing method to use', max_length=255, blank=True)
 
     def __str__(self):
         return self.name
 
     class Meta:
         ordering = ['name']
+
+    @property
+    def total_number_of_images(self):
+        if self.user_frame_selection:
+            return ImageSequence.objects.filter(subject__dataset__task=self).count()
+        else:
+            return ImageSequence.objects.filter(imageannotation__task=self).count()
+
+    @property
+    def number_of_annotated_images(self):
+        return ImageSequence.objects.filter(imageannotation__in=ImageAnnotation.objects.filter(task=self, finished=True)).count()
+
+    @property
+    def percentage_finished(self):
+        if self.total_number_of_images == 0:
+            return 0
+        else:
+            return round(self.number_of_annotated_images*100 / self.total_number_of_images, 1)
+
 
 
 class ImageSequence(models.Model):
@@ -113,6 +128,7 @@ class ImageAnnotation(models.Model):
     image_quality = models.CharField(max_length=50, choices=IMAGE_QUALITY_CHOICES)
     comments = models.TextField()
     rejected = models.BooleanField()
+    finished = models.BooleanField(default=True)
 
 
 class KeyFrameAnnotation(models.Model):

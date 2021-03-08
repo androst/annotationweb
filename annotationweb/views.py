@@ -19,15 +19,6 @@ from common.user import is_annotater
 
 def get_task_statistics(tasks, user):
     for task in tasks:
-        # TODO Fix these number calculations
-        task.total_number_of_images = ImageSequence.objects.filter(subject__dataset__task=task.id).count()
-        task.number_of_annotated_images = ImageSequence.objects.filter(imageannotation__in=ImageAnnotation.objects.filter(task_id=task.id)).count()
-
-        if task.total_number_of_images == 0:
-            task.percentage_finished = 0
-        else:
-            task.percentage_finished = round(task.number_of_annotated_images*100 /
-                                             task.total_number_of_images, 1)
         # Check if user has processed any
         task.started = ImageAnnotation.objects.filter(task=task, user=user).count() > 0
         task.finished = task.number_of_annotated_images == task.total_number_of_images
@@ -284,40 +275,8 @@ def add_image_sequence(request, subject_id):
                 new_image_sequence.subject = subject
 
                 new_image_sequence.save()  # Save to db
-                if request.POST['frame_selection'] == 'none':
-                    messages.success(request, 'Sequence successfully added')
-                    return redirect('datasets')
-                elif request.POST['frame_selection'] == 'manual':
-                    return redirect('add_key_frames', new_image_sequence.id)
-                elif request.POST['frame_selection'] == 'every_n_frame':
-                    try:
-                        frame_step = int(request.POST['frame_step'])
-                        frame_start = int(request.POST['frame_start'])
-                    except:
-                        messages.error(request, 'No input given to every X frame.')
-                    if frame_step <= 0 or frame_step >= new_image_sequence.nr_of_frames or frame_start < 0 \
-                            or frame_start >= new_image_sequence.nr_of_frames:
-                        messages.error(request, 'Incorrect frame step or start nr.')
-                    else:
-                        # Add every frame_step
-                        for frame_nr in range(frame_start, new_image_sequence.nr_of_frames, frame_step):
-                            raise NotImplemented()
-                            # Create image
-                            image = Image()
-                            image.filename = new_image_sequence.format.replace('#', str(frame_nr))
-                            image.subject = subject
-                            image.save()
-
-                            # Create associated key frame
-                            key_frame = KeyFrame()
-                            key_frame.frame_nr = frame_nr
-                            key_frame.image_sequence = new_image_sequence
-                            key_frame.image = image
-                            key_frame.save()
-
-                        messages.success(request, 'The image sequence and frames were stored.')
-                        return redirect('datasets')
-
+                messages.success(request, 'Sequence successfully added')
+                return redirect('datasets')
     else:
         form = ImageSequenceForm()
 
@@ -325,37 +284,59 @@ def add_image_sequence(request, subject_id):
 
 
 @staff_member_required
-def add_key_frames(request, image_sequence_id):
+def select_key_frames(request, task_id, image_id):
     try:
-        image_sequence = ImageSequence.objects.get(pk=image_sequence_id)
+        image_sequence = ImageSequence.objects.get(pk=image_id)
+        task = Task.objects.get(pk=task_id)
     except ImageSequence.DoesNotExist:
         raise Http404('Image sequence does not exist')
+    except Task.DoesNotExist:
+        raise Http404('Task does not exist')
 
     if request.method == 'POST':
         frame_list = request.POST.getlist('frames')
         if len(frame_list) == 0:
             messages.error(request, 'You must select at least 1 frame')
         else:
+            # Add annotation object if not exists
+            try:
+                annotation = ImageAnnotation.objects.get(image_id=image_id, task_id=task_id)
+            except ImageAnnotation.DoesNotExist:
+                annotation = ImageAnnotation()
+                annotation.image_id = image_id
+                annotation.task_id = task_id
+                annotation.rejected = False
+                annotation.user = request.user
+                annotation.finished = False
+                annotation.save()
             # Add frames to db
             for frame_nr in frame_list:
-                raise NotImplemented()
-                # Create image
-                image = Image()
-                image.filename = image_sequence.format.replace('#', str(frame_nr))
-                image.subject = image_sequence.subject
-                image.save()
+                # Add new key frames if not exists
+                print(frame_nr)
+                try:
+                    key_frame = KeyFrameAnnotation.objects.get(image_annotation=annotation, frame_nr=frame_nr)
+                    # Already exists, do nothing
+                except KeyFrameAnnotation.DoesNotExist:
+                    # Does not exist, add it
+                    key_frame = KeyFrameAnnotation()
+                    key_frame.image_annotation = annotation
+                    key_frame.frame_nr = frame_nr
+                    key_frame.save()
+                    if annotation.finished:
+                        # New frame, mark annotation as unfinished
+                        annotation.finished = False
+                        annotation.save()
 
-                # Create associated key frame
-                key_frame = KeyFrame()
-                key_frame.frame_nr = int(frame_nr)
-                key_frame.image_sequence = image_sequence
-                key_frame.image = image
-                key_frame.save()
+            # Delete frames that were not added
+            to_delete = KeyFrameAnnotation.objects.filter(image_annotation=annotation).exclude(frame_nr__in=frame_list)
+            deleted_count = len(to_delete)
+            to_delete.delete()
 
-            messages.success(request, 'The image sequence and frames were stored.')
-            return redirect('datasets')
-
-    return render(request, 'annotationweb/add_key_frames.html', {'image_sequence': image_sequence})
+            messages.success(request, 'The ' + str(len(frame_list)) + ' key frames were stored. ' + str(deleted_count) + ' key frames were deleted.')
+            return redirect('task', task_id)
+    else:
+        frames = KeyFrameAnnotation.objects.filter(image_annotation__image=image_sequence, image_annotation__task=task)
+        return render(request, 'annotationweb/add_key_frames.html', {'image_sequence': image_sequence, 'task': task, 'frames': frames})
 
 
 def show_frame(request, image_sequence_id, frame_nr, task_id):
@@ -428,16 +409,12 @@ def task_description(request, task_id):
 
     if task.type == task.CLASSIFICATION:
         url = reverse('classification:label_image', args=[task_id])
-    elif task.type == task.SEGMENTATION:
-        url = reverse('segmentation:segment_image', args=[task_id])
     elif task.type == task.BOUNDING_BOX:
         url = reverse('boundingbox:process_image', args=[task_id])
     elif task.type == task.LANDMARK:
         url = reverse('landmark:process_image', args=[task_id])
     elif task.type == task.CARDIAC_SEGMENTATION:
         url = reverse('cardiac:segment_image', args=[task_id])
-    elif task.type == task.CARDIAC_LANDMARK:
-        url = reverse('cardiac_landmark:landmark_image', args=[task_id])
     elif task.type == task.SPLINE_SEGMENTATION:
         url = reverse('spline_segmentation:segment_image', args=[task_id])
     else:
@@ -528,12 +505,13 @@ def task(request, task_id):
         queryset = queryset.filter(
             subject__dataset__task=task,
             subject__in=subjects_selected
-        ).exclude(imageannotation__task=task)
+        ).exclude(imageannotation__task=task, imageannotation__finished=True)
     else:
         if task.type == Task.CLASSIFICATION:
             queryset = queryset.filter(
                 imageannotation__image_quality__in=image_quality,
                 imageannotation__task=task,
+                imageannotation__finished=True,
                 imageannotation__user__in=users_selected,
                 imageannotation__keyframeannotation__imagelabel__in=labels_selected,
                 subject__in=subjects_selected,
@@ -542,6 +520,7 @@ def task(request, task_id):
             queryset = queryset.filter(
                 imageannotation__image_quality__in=image_quality,
                 imageannotation__task=task,
+                imageannotation__finished=True,
                 imageannotation__user__in=users_selected,
                 subject__in=subjects_selected
             )
@@ -582,14 +561,10 @@ def get_redirection(task):
         return 'classification:label_image'
     elif task.type == Task.BOUNDING_BOX:
         return 'boundingbox:process_image'
-    elif task.type == Task.SEGMENTATION:
-        return 'segmentation:segment_image'
     elif task.type == Task.LANDMARK:
         return 'landmark:process_image'
     elif task.type == Task.CARDIAC_SEGMENTATION:
         return 'cardiac:segment_image'
-    elif task.type == Task.CARDIAC_LANDMARK:
-        return 'cardiac_landmark:landmark_image'
     elif task.type == Task.SPLINE_SEGMENTATION:
         return 'spline_segmentation:segment_image'
 

@@ -1,73 +1,28 @@
 Annotation web
 ====================================
 
-Requirements
-------------------------------------
-* python 3
-* django 2.1
-* numpy
-* pillow (PIL)
-* +++ see requirements.txt
+Annotation web is a web-based annnotation system made primarily for easy annotation of 
+image sequences such as ultrasound and camera recordings.
+It uses mainly django/python for the backend and javascript/jQuery and HTML canvas for 
+the interactive annotation frontend.
 
-Setup
-------------------------------------
+Annotation web is developed by SINTEF Medical Technology and Norwegian University of Science and Technology (NTNU), and is released under a permissive [MIT license](https://github.com/smistad/annotationweb/blob/master/LICENSE.md).
 
-**1. Clone repo**
-```bash
-git clone https://github.com/smistad/annotationweb.git
-```
+You are more than welcome to contribute to this project, and feel free to ask questions.
 
-**2. Setup up virtual environment**
-```bash
-cd annotationweb
-virtualenv -ppython3 environment
-source environment/bin/activate
-```
+![Annotation web](https://github.com/smistad/annotationweb/wiki/images/annotationweb.png)
 
-**3. Install requirements**
-```bash
-pip install --upgrade pip # Make sure pip is up to date first
-pip install -r requirements.txt
-```
+**Main features**
+* Pure web-based system. Annotaters only need a web browser, they don't have to install anything, and everything is stored on the server.
+* Fast and interactive annotation of temporal data/video using javascript and HTML 5 canvas.
+* Secure login with two-factor authentication.
+* Multiple annotation tasks are implemented, such image classification, segmentation using splines, landmark and bounding box.
 
-**4. Initialize database**
-```bash
-./manage.py makemigrations
-./manage.py migrate
-```
-
-**5. Create super user**
-```bash
-./manage.py createsuperuser
-```
-
-**6. Run server and have fun**
-```bash
-./manage.py runserver
-```
-
-Open browser at http://localhost:8000
-
-Updating
---------
-
-**1. Back up your database**
-Your database is stored entirely in the db.sqlite3 file. Copy this to a safe location.
-You may also want to keep a copy of the code as well, so you can copy the entire project folder.
-
-**2. Pull latest changes from git**
-```bash
-git pull
-```
-
-**3. Update database**
-```bash
-./manage.py migrate
-```
-
-**4. Run server and have fun**
-```bash
-./manage.py runserver
-```
-
-Open browser at http://localhost:8000
+For more information, see the following wiki pages:
+* [System overview](https://github.com/smistad/annotationweb/wiki/System-overview) - Overview of the system design, goal, code structure, etc.
+* [Development setup](https://github.com/smistad/annotationweb/wiki/Development-setup) - Running annotation web locally on your machine
+* [Server setup](https://github.com/smistad/annotationweb/wiki/Server-setup) - Running annotation web on a server
+* [Importing data](https://github.com/smistad/annotationweb/wiki/Importing-data)
+* [User management](https://github.com/smistad/annotationweb/wiki/User-management) - Create users, admins, change password, add 2FA for users ++
+* [Setting up an annotation task](https://github.com/smistad/annotationweb/wiki/Setup-annotation-task)
+* [Exporting annotated data](https://github.com/smistad/annotationweb/wiki/Export-annotations)

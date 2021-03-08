@@ -1,12 +1,16 @@
 import json
 import random
-
+from django.contrib import messages
 from django.http import Http404
-
 from annotationweb.models import Task, ImageAnnotation, Subject, Label, ImageSequence, KeyFrameAnnotation
 from annotationweb.forms import ImageListForm
 from django.db.models.aggregates import Count
 from common.search_filters import SearchFilter
+
+
+class NoMoreImages(Exception):
+    """"Raise when no more images to annotate for a given task"""
+    pass
 
 
 def get_next_unprocessed_image(task):
@@ -15,15 +19,23 @@ def get_next_unprocessed_image(task):
     :param task:
     :return image:
     """
-    count = ImageSequence.objects.filter(subject__dataset__task=task).exclude(imageannotation__task=task).aggregate(count=Count('id'))['count']
+    queryset = ImageSequence.objects.filter(imageannotation__task=task, imageannotation__finished=False)
+    if not task.user_frame_selection:
+        # If user cannot select their own key frames, skip those without a key frame
+        queryset = queryset.exclude(imageannotation__keyframeannotation__isnull=True)
+
+    count = queryset.aggregate(count=Count('id'))['count']
+    if count == 0:
+        raise NoMoreImages
     if task.shuffle_videos:
         index = random.randint(0, count - 1)
     else:
         index = 0
 
-    return ImageSequence.objects.filter(subject__dataset__task=task).exclude(imageannotation__task=task).order_by("subject", "format")[index]
+    return queryset.order_by("subject", "format")[index]
 
 
+# TODO These two functions get_previous and get_next_image are not up to date and thus just return None
 # TODO cleanup these to functions, extract common functionality
 def get_previous_image(request, task, image):
     try:
@@ -240,6 +252,11 @@ def setup_task_context(request, task_id, type, image_id):
         if 'return_to_url' in request.session:
             context['return_url'] = request.session['return_to_url']
 
+    if not task.user_frame_selection:
+        # Check if image has key frames for this task
+        if KeyFrameAnnotation.objects.filter(image_annotation__task=task, image_annotation__image=image).count() == 0:
+            raise RuntimeError('This image sequence has no key frames. An admin must select key frames before annotating.')
+
     # Delete return URL
     if 'return_to_url' in request.session:
         del request.session['return_to_url']
@@ -250,13 +267,6 @@ def setup_task_context(request, task_id, type, image_id):
 
     context['image'] = image
     context['task'] = task
-    task.total_number_of_images = ImageSequence.objects.filter(subject__dataset__task=task.id).count()
-    task.number_of_annotated_images = ImageSequence.objects.filter(imageannotation__in=ImageAnnotation.objects.filter(task_id=task.id)).count()
-    if task.total_number_of_images == 0:
-        task.percentage_finished = 0
-    else:
-        task.percentage_finished = round(task.number_of_annotated_images*100 /
-                                         task.total_number_of_images, 1)
     context['image_quality_choices'] = ImageAnnotation.IMAGE_QUALITY_CHOICES
 
     # Check if image has been annotated
@@ -299,6 +309,7 @@ def save_annotation(request):
     annotation.rejected = rejected
     annotation.comments = comments
     annotation.user = request.user
+    annotation.finished = True
     annotation.image_quality = request.POST['quality']
     annotation.save()
 
