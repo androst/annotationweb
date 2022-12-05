@@ -20,7 +20,8 @@ var g_nextURL = '';
 var g_rejected = false;
 var g_targetFrames = []; // Frames to annotate
 var g_currentTargetFrameIndex = -1; // Index of current target frame (g_targetFrames), -1 if not on target frame
-var g_annotateIndividualFrames = true;
+var g_shiftKeyPressed = false;
+var g_userFrameSelection = false;
 
 function max(a, b) {
     return a > b ? a : b;
@@ -28,6 +29,16 @@ function max(a, b) {
 
 function min(a, b) {
     return a < b ? a : b;
+}
+
+function mousePos(e, canvas) {
+    var scale =  g_canvasWidth / $('#canvas').width();
+    var mouseX = (e.pageX - canvas.offsetLeft)*scale;
+    var mouseY = (e.pageY - canvas.offsetTop)*scale;
+    return {
+        x: mouseX,
+        y: mouseY,
+    }
 }
 
 function incrementFrame() {
@@ -49,15 +60,17 @@ function incrementFrame() {
 function setPlayButton(play) {
     g_isPlaying = play;
     if(g_isPlaying) {
-        $("#playButton").html('Pause');
+        document.getElementById('playButton').title = 'Pause';
+        document.getElementById('play').className = "fa fa-pause";
     } else {
-        $("#playButton").html('Play');
+        document.getElementById('playButton').title = 'Play';
+        document.getElementById('play').className = "fa fa-play";
     }
 }
 
 function goToFrame(frameNr) {
     setPlayButton(false);
-    g_currentFrameNr = frameNr;
+    g_currentFrameNr = min(max(0, frameNr), g_framesLoaded-1);
     $('#slider').slider('value', frameNr); // Update slider
     $('#currentFrame').text(g_currentFrameNr);
     var marker_index = g_targetFrames.findIndex(index => index === frameNr);
@@ -82,19 +95,19 @@ function save() {
                 window.location = g_returnURL;
             } else {
                 // Reset image quality form before refreshing
-                $('#imageQualityForm')[0].reset();
-                $('#comments').val('');
+                //$('#imageQualityForm')[0].reset();
+                //$('#comments').val('');
                 // Refresh page
                 location.reload();
             }
         } else {
-            messageBox.innerHTML = '<div class="error"><strong>Save failed!</strong><br> ' + data.message + '</div>';
+            messageBox.innerHTML = '<div class="error"><strong>Save failed</strong><br> ' + data.message + '</div>';
         }
         console.log(data.message);
     }).fail(function(data) {
         console.log("Ajax failed");
         var messageBox = document.getElementById("message");
-        messageBox.innerHTML = '<span class="error">Save failed!</span>';
+        messageBox.innerHTML = '<span class="error">Save failed: remember to choose image quality</span>';
     }).always(function(data) {
         console.log("Ajax complete");
     });
@@ -155,7 +168,6 @@ function initializeAnnotation(taskID, imageID) {
 function setupSliderMark(frame, color) {
     color = typeof color !== 'undefined' ? color : '#0077b3';
 
-    var marker_index = g_targetFrames.findIndex(index => index === frame);
     var slider = document.getElementById('slider')
 
     var newMarker = document.createElement('span');
@@ -172,22 +184,61 @@ function setupSliderMark(frame, color) {
     console.log('Made marker');
 }
 
-function addKeyFrame(frame_nr) {
+function addKeyFrame(frame_nr, color) {
+    color = typeof color !== 'undefined' ? color : '#0077b3';
     if(g_targetFrames.includes(frame_nr)) // Already exists
         return;
-    setupSliderMark(frame_nr);
+    setupSliderMark(frame_nr, color);
     g_targetFrames.push(frame_nr);
     g_targetFrames.sort(function(a, b){return a-b});
     $("#framesSelected").append('<li id="selectedFrames' + frame_nr + '">' + frame_nr + '</li>');
     $("#framesForm").append('<input id="selectedFramesForm' + frame_nr + '" type="hidden" name="frames" value="' + frame_nr + '">');
 }
 
+function goToNextKeyFrame() {
+    if(g_targetFrames.length === 0)
+        return;
+    // Find next key frame
+    let i;
+    if(g_targetFrames[g_targetFrames.length-1] <= g_currentFrameNr) {
+        i = 0;
+    } else if(g_targetFrames.length === 1) {
+        i = 0;
+    } else {
+        for (i = 0; i < g_targetFrames.length; i++) {
+            if(g_targetFrames[i] > g_currentFrameNr)
+                break;
+        }
+    }
+    g_currentTargetFrameIndex = i;
+    goToFrame(g_targetFrames[i]);
+}
+
+function goToPreviousKeyFrame() {
+    if(g_targetFrames.length === 0)
+        return;
+    // Find previous key frame
+    let i;
+    if(g_targetFrames[0] >= g_currentFrameNr || g_targetFrames[g_targetFrames.length-1] < g_currentFrameNr) {
+        i = g_targetFrames.length-1;
+    } else if(g_targetFrames.length === 1) {
+        i = 0;
+    } else {
+        for (i = g_targetFrames.length-1; i > 0; i--) {
+            if(g_targetFrames[i] < g_currentFrameNr)
+                break;
+        }
+    }
+    g_currentTargetFrameIndex = i;
+    goToFrame(g_targetFrames[i]);
+}
 function loadSequence(image_sequence_id, start_frame, nrOfFrames, show_entire_sequence, user_frame_selection, annotate_single_frame, frames_to_annotate, images_to_load_before, images_to_load_after, auto_play) {
     // If user cannot select frame, and there are no target frames, select last frame as target frame
     if(!user_frame_selection && annotate_single_frame && frames_to_annotate.length === 0) {
         // Select last frame as target frame
         frames_to_annotate.push(nrOfFrames-1);
     }
+    g_userFrameSelection = user_frame_selection;
 
 
     console.log('In load sequence');
@@ -229,7 +280,6 @@ function loadSequence(image_sequence_id, start_frame, nrOfFrames, show_entire_se
     }
     g_startFrame = start;
     g_sequenceLength = end-start;
-    g_annotateIndividualFrames = annotate_single_frame;
 
     // Create slider
     $("#slider").slider(
@@ -288,37 +338,57 @@ function loadSequence(image_sequence_id, start_frame, nrOfFrames, show_entire_se
         }
     });
 
+
+
     $("#nextFrameButton").click(function() {
-        if(g_targetFrames.length === 0)
-            return;
-        // Find next frame
-        var i;
-        if(g_targetFrames[g_targetFrames.length-1] <= g_currentFrameNr) {
-            i = 0;
+        goToNextKeyFrame();
+    });
+
+    // Moving between frames
+    // Scrolling (mouse must be over canvas)
+    $("#canvas").bind('mousewheel DOMMouseScroll', function(event){
+        g_shiftKeyPressed = event.shiftKey;
+        console.log('Mousewheel event!');
+        if(event.originalEvent.wheelDelta > 0 || event.originalEvent.detail < 0) {
+            // scroll up
+            if(g_shiftKeyPressed) {
+                goToNextKeyFrame();
+            } else {
+                goToFrame(g_currentFrameNr + 1);
+            }
         } else {
-            for (i = 0; i < g_targetFrames.length; i++) {
-                if(g_targetFrames[i] > g_currentFrameNr)
-                    break;
+            // scroll down
+            if(g_shiftKeyPressed) {
+                goToPreviousKeyFrame();
+            } else {
+                goToFrame(g_currentFrameNr - 1);
             }
         }
-        g_currentTargetFrameIndex = i;
-        goToFrame(g_targetFrames[i]);
+        event.preventDefault();
     });
 
-    $("#canvas").click(function() {
-        // Stop playing if user clicks image
-        setPlayButton(false);
-        //g_currentFrameNr = target_frame;
-        //$('#slider').slider('value', target_frame); // Update slider
-        redrawSequence();
+    // Arrow key pressed
+    $(document).keydown(function(event){
+        g_shiftKeyPressed = event.shiftKey;
+        if(event.which === 37) { // Left
+            if(g_shiftKeyPressed) {
+                goToPreviousKeyFrame();
+            } else {
+                goToFrame(g_currentFrameNr - 1);
+            }
+        } else if(event.which === 39) { // Right
+            if(g_shiftKeyPressed) {
+                goToNextKeyFrame();
+            } else {
+                goToFrame(g_currentFrameNr + 1);
+            }
+        }
     });
 
-    $('#removeFrameButton').click(function() {
-        var frame = parseInt(g_currentFrameNr);
-        // Remove current target frame
-        g_targetFrames = g_targetFrames.filter(function (value, index, arr) {return value!=frame});
-        updateSliderMarks();
+    $(document).keyup(function(event) {
+        g_shiftKeyPressed = event.shiftKey;
     });
+
 
     // Load images
     g_framesLoaded = 0;
@@ -448,22 +518,6 @@ function decorateLabelButtons(list) {
     // Then add it the ones which have been selected
     for(var i = 0; i < list.length; i++) {
         $('#labelButton' + list[i].id).addClass('activeLabel');
-    }
-}
-
-function updateSliderMarks(){
-    removeAllSliderMarks();
-
-    for(var frame in g_targetFrames){
-        setupSliderMark(frame, g_framesLoaded);
-    }
-}
-
-function removeAllSliderMarks(){
-    var slider = document.getElementById('slider')
-    for (var i = slider.childNodes.length-1; i >= 0; i--) {
-        if(slider.childNodes[i].nodeName.includes("SLIDERMARKER"))
-            slider.removeChild(slider.childNodes[i]);
     }
 }
 

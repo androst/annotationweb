@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.db import transaction
 from django.http import QueryDict
 from django.shortcuts import render, redirect
 from django.http import HttpResponseRedirect, HttpResponse, Http404
@@ -276,7 +277,7 @@ def add_image_sequence(request, subject_id):
 
                 new_image_sequence.save()  # Save to db
                 messages.success(request, 'Sequence successfully added')
-                return redirect('datasets')
+                return redirect('dataset_details', subject.dataset.id)
     else:
         form = ImageSequenceForm()
 
@@ -401,6 +402,30 @@ def delete_subject(request, subject_id):
         return render(request, 'annotationweb/delete_subject.html', {'subject': subject})
 
 
+@staff_member_required()
+def subject_details(request, subject_id):
+    try:
+        subject = Subject.objects.get(pk=subject_id)
+    except Subject.DoesNotExist:
+        return Http404('The subject does not exist')
+
+    return render(request, 'annotationweb/subject_details.html', {'subject': subject})
+
+@staff_member_required()
+def delete_sequence(request, sequence_id):
+    try:
+        sequence = ImageSequence.objects.get(pk=sequence_id)
+    except ImageSequence.DoesNotExist:
+        return Http404('The sequence does not exist')
+
+    if request.method == 'POST':
+        if request.POST['choice'] == 'Yes':
+            sequence.delete()
+            messages.success(request, 'The subject ' + sequence.format + ' was deleted.')
+        return redirect('subject_details', sequence.subject.id)
+    else:
+        return render(request, 'annotationweb/delete_sequence.html', {'sequence': sequence})
+
 def task_description(request, task_id):
     try:
         task = Task.objects.get(pk=task_id)
@@ -417,6 +442,12 @@ def task_description(request, task_id):
         url = reverse('cardiac:segment_image', args=[task_id])
     elif task.type == task.SPLINE_SEGMENTATION:
         url = reverse('spline_segmentation:segment_image', args=[task_id])
+    elif task.type == task.CARDIAC_PLAX_SEGMENTATION:
+        url = reverse('cardiac_parasternal_long_axis:segment_image', args=[task_id])
+    elif task.type == task.CARDIAC_ALAX_SEGMENTATION:
+        url = reverse('cardiac_apical_long_axis:segment_image', args=[task_id])
+    elif task.type == task.SPLINE_LINE_POINT:
+        url = reverse('spline_line_point:segment_image', args=[task_id])
     else:
         raise NotImplementedError()
 
@@ -565,8 +596,14 @@ def get_redirection(task):
         return 'landmark:process_image'
     elif task.type == Task.CARDIAC_SEGMENTATION:
         return 'cardiac:segment_image'
+    elif task.type == Task.CARDIAC_PLAX_SEGMENTATION:
+        return 'cardiac_parasternal_long_axis:segment_image'
+    elif task.type == Task.CARDIAC_ALAX_SEGMENTATION:
+        return 'cardiac_apical_long_axis:segment_image'
     elif task.type == Task.SPLINE_SEGMENTATION:
         return 'spline_segmentation:segment_image'
+    elif task.type == Task.SPLINE_LINE_POINT:
+        return 'spline_line_point:segment_image'
 
 
 # @register.simple_tag
@@ -611,3 +648,46 @@ def annotate_image(request, task_id, image_id):
 
     url = reverse(get_redirection(task), kwargs={'task_id': task.id, 'image_id': image_id})
     return redirect(url + '?' + request.GET.urlencode())
+
+@staff_member_required
+def copy_task(request, task_id):
+    """This will only copy the task itself and key frames, not the annotations"""
+    try:
+        task = Task.objects.get(pk=task_id)
+        with transaction.atomic():
+            datasets = task.dataset.all() # Keep
+            labels = task.label.all() # Keep
+            task.pk = None # Set primary key to none to copy
+            task.name = task.name + ' Copy'
+            task.save()
+
+            # Must take care of relations here.. how?? Copy relations:
+            task.dataset.clear()
+            for dataset in datasets:
+                print(dataset)
+                task.dataset.add(dataset)
+            task.label.clear()
+            for label in labels:
+                print(label)
+                task.label.add(label)
+            task.user.clear() # Not keep
+            task.save()
+
+            # Copy all ImageAnnotation and KeyFrameAnnotations
+            for annotation in ImageAnnotation.objects.filter(task_id=task_id):
+                key_frames = KeyFrameAnnotation.objects.filter(image_annotation=annotation)
+                annotation.finished = False
+                annotation.pk = None # Set primary key to none to copy
+                annotation.task = task
+                annotation.save()
+                for key_frame in key_frames:
+                    key_frame.pk = None
+                    key_frame.image_annotation = annotation
+                    key_frame.save()
+        messages.success(request, 'Task copy complete')
+        return redirect('index')
+    except Task.DoesNotExist:
+        return Http404('The Task does not exist')
+    except Exception as e:
+        messages.error(request, 'Error in copy: ' + str(e))
+        return redirect('index')

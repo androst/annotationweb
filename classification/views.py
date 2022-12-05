@@ -1,14 +1,11 @@
-import json
-
 from django.contrib import messages
 from django.http import JsonResponse, HttpResponseRedirect
 from django.shortcuts import render, redirect
 from django.http import Http404
-
 import common.task
-
 from .models import *
 from annotationweb.models import Task, ImageAnnotation
+from django.db import transaction
 
 
 def label_next_image(request, task_id):
@@ -20,10 +17,12 @@ def label_image(request, task_id, image_id):
         context = common.task.setup_task_context(request, task_id, Task.CLASSIFICATION, image_id)
         context['javascript_files'] = ['classification/classification.js']
 
+        # Load labels
+        #context['labels'] = Label.objects.filter(task=task_id)
+
         # Get label, if image has been already labeled
         try:
-            processed = ImageLabel.objects.get(image__image_annotation__image_id=image_id,
-                                               image__image_annotation__task_id=task_id)
+            processed = ImageLabel.objects.get(image__image_annotation__image_id=image_id, image__image_annotation__task_id=task_id)
             context['chosen_label'] = processed.label.id
         except:
             print('Not found..')
@@ -44,25 +43,25 @@ def save_labels(request):
         if rejected:
             annotations = common.task.save_annotation(request)
         else:
-            try:
-                label_id = int(request.POST['label_id'])
-                label = Label.objects.get(pk=label_id)
-            except:
-                raise Exception('You must select a classification label.')
+            with transaction.atomic():
+                try:
+                    label_id = int(request.POST['label_id'])
+                    label = Label.objects.get(pk=label_id)
+                except:
+                    raise Exception('You must select a classification label.')
 
-            annotations = common.task.save_annotation(request)
-            for annotation in annotations:
+                annotations = common.task.save_annotation(request)
+                for annotation in annotations:
+                    labeled_image = ImageLabel()
+                    labeled_image.image = annotation
+                    labeled_image.label = label
+                    labeled_image.task = annotation.image_annotation.task
+                    labeled_image.save()
 
-                labeled_image = ImageLabel()
-                labeled_image.image = annotation
-                labeled_image.label = label
-                labeled_image.task = annotation.image_annotation.task
-                labeled_image.save()
-
-        response = {
-            'success': 'true',
-            'message': 'Completed'
-        }
+            response = {
+                'success': 'true',
+                'message': 'Completed'
+            }
         messages.success(request, 'Classification saved')
     except Exception as e:
         response = {
@@ -71,3 +70,4 @@ def save_labels(request):
         }
 
     return JsonResponse(response)
+

@@ -7,7 +7,6 @@ var g_pointToMove = -1;
 var g_labelToMove = -1;
 var g_moveDistanceThreshold = 8;
 var g_drawLine = false;
-var g_shiftKeyPressed = false;
 var g_currentLabel = -1;
 
 function getMaxObjectID() {
@@ -21,9 +20,6 @@ function getMaxObjectID() {
 }
 
 function setupSegmentation() {
-
-    // Remove any previous event handlers
-    $('#canvas').off();
 
     // Define event callbacks
     $('#canvas').mousedown(function(e) {
@@ -105,40 +101,6 @@ function setupSegmentation() {
         redrawSequence();
     });
 
-    var z = document.getElementById("canvas");
-    var baseWidth = 500;
-    var padding = 100;
-
-    var zoomStep = 30;
-
-    var handleWheel = function (event) {
-        // cross-browser wheel delta
-        // Chrome / IE: both are set to the same thing - WheelEvent for Chrome, MouseWheelEvent for IE
-        // Firefox: first one is undefined, second one is MouseScrollEvent
-        var e = window.event || event;
-        // Chrome / IE: first one is +/-120 (positive on mouse up), second one is zero
-        // Firefox: first one is undefined, second one is -/+3 (negative on mouse up)
-        var delta = Math.max(-1, Math.min(1, e.wheelDelta || -e.detail));
-
-        // Do something with `delta`
-        console.log(z.clientWidth, padding, zoomStep, delta)
-        var zz = z.clientWidth + zoomStep * delta;
-        zz = Math.max(zoomStep, Math.min(2 * baseWidth, zz));
-        console.log(zz)
-
-        z.style.width = zz + "px";
-
-        z.innerHTML = "<small>" + window.event + " | " + event +
-          "</small><br><small>" +   e.wheelDelta + " | " + e.detail +
-          "</small><br>" + delta + " | " + zz + " | " + z.clientWidth + "px";
-
-        e.preventDefault();
-    };
-
-    $('#canvas').bind('mousewheel DOMMouseScroll', function(event){
-        handleWheel(event);
-    });
-
     $('#canvas').dblclick(function(e) {
         if(g_move)
             return;
@@ -157,29 +119,17 @@ function setupSegmentation() {
 
 
     $("#clearButton").click(function() {
-        // TODO fix
-    });
-
-    // TODO MOVE to annotation
-    $('#removeTargetFrameButton').click(function() {
-        goToFrame(g_currentFrameNr)
-        setPlayButton(false);
-        $('#slider').slider('value', g_currentFrameNr); // Update slider
-
-        if(g_targetFrames.includes(g_currentFrameNr)){
-            var target_frame_idx = g_targetFrames.indexOf(g_currentFrameNr)
-            var target_id = "sliderMarker" + g_currentFrameNr;
-
-            slider.querySelector(target_id).remove();
-            g_targetFrames.splice(target_frame_idx,1);
-            g_controlPoints.splice(target_frame_idx,1);
-        }
-
+        g_annotationHasChanged = true;
+        g_controlPoints[g_currentFrameNr][g_currentObject].control_points = [];
         redrawSequence();
     });
 
-    $(document).on('keyup keydown', function(event) {
-        g_shiftKeyPressed = event.shiftKey;
+    $('#removeFrameButton').click(function() {
+        // Remove splines in this frame
+        if(g_currentFrameNr in g_controlPoints){
+            delete g_controlPoints[g_currentFrameNr];
+        }
+        redrawSequence();
     });
 
     $(document).keydown(function(event) {

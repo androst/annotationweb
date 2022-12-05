@@ -17,6 +17,15 @@ loadSequence(
     false
 );
 
+    $("#manuallyAddFrame").keypress(function(event) {
+        if(event.which == 13) {
+            let frame_nr = parseInt($("#manuallyAddFrame").val());
+            if(frame_nr >= {{ image_sequence.start_frame_nr }} && frame_nr < {{image_sequence.start_frame_nr}} + {{image_sequence.nr_of_frames}}) {
+                addKeyFrame(frame_nr);
+                $("#manuallyAddFrame").val('');
+            }
+        }
+    });
 {% endblock %}
 
 {% block content %}
@@ -34,13 +43,18 @@ loadSequence(
 <br><br>
 <strong style="color: red;">If you delete a frame which already has been an annotated, that annotation will be deleted!</strong>
 <br>
-<button id="addFrameButton">Add current frame</button>
-<button id="nextFrameButton">Go to next key frame</button>
-<button id="removeFrameButton">Delete current key frame</button>
+<div class="actionButtons">
+    <button id="playButton" type="button"><i id="play" class="fa fa-play"></i></button>
+    <button id="addFrameButton" type="button" title="Select frame for annotation"><i class="fa fa-plus"></i></button>
+    <button id="removeFrameButton" type="button" title="Remove selected frame from annotations"><i class="fa fa-minus"></i></button>
+    <button id="nextFrameButton" type="button" title="Next annotation frame"><i class="fa fa-step-forward"></i></button>
+</div>
 
 <h4>Selected frames</h4>
 <ul id="framesSelected">
 </ul>
+
+Manually add: <input type="text" id="manuallyAddFrame">
 
 <form action="{% url 'select_key_frames' task.id image_sequence.id  %}" method="post">
     {% csrf_token %}

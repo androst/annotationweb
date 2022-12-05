@@ -18,7 +18,6 @@ var g_motionModeContext;
 var g_createMotionModeImage = 0;
 var g_motionModeLine = -1;
 var g_moveMotionModeLIne = false;
-var g_shiftKeyPressed = false;
 var g_targetFrameTypes = {};
 var g_currentLabel = -1;
 
@@ -51,9 +50,6 @@ function setupSegmentation() {
     // Create the image which will be put on canvas
     g_image = g_context.getImageData(0, 0, g_canvasWidth, g_canvasHeight);
     g_imageData = g_image.data;
-
-    // Remove any previous event handlers
-    $('#canvas').off();
 
     // Define event callbacks
     $('#canvas').mousedown(function(e) {
@@ -160,11 +156,9 @@ function setupSegmentation() {
         setPlayButton(false);
         if(g_targetFrames.includes(g_currentFrameNr)) // Already exists
             return;
-        setupSliderMark(g_currentFrameNr, g_framesLoaded, '#555555');
+        addKeyFrame(g_currentFrameNr, '#555555');
         g_targetFrameTypes[g_currentFrameNr] = 'Normal';
-        g_targetFrames.push(g_currentFrameNr);
         g_currentTargetFrameIndex = g_targetFrames.length-1;
-        g_targetFrames.sort(function(a, b){return a-b});
     });
 
 
@@ -172,11 +166,9 @@ function setupSegmentation() {
         setPlayButton(false);
         if(g_targetFrames.includes(g_currentFrameNr)) // Already exists
             return;
-        setupSliderMark(g_currentFrameNr, g_framesLoaded, '#CC3434');
+        addKeyFrame(g_currentFrameNr, '#CC3434');
         g_targetFrameTypes[g_currentFrameNr] = 'ED';
-        g_targetFrames.push(g_currentFrameNr);
         g_currentTargetFrameIndex = g_targetFrames.length-1;
-        g_targetFrames.sort(function(a, b){return a-b});
     });
 
 
@@ -184,11 +176,9 @@ function setupSegmentation() {
         setPlayButton(false);
         if(g_targetFrames.includes(g_currentFrameNr)) // Already exists
             return;
-        setupSliderMark(g_currentFrameNr, g_framesLoaded, '#0077b3');
+        addKeyFrame(g_currentFrameNr, '#0077b3');
         g_targetFrameTypes[g_currentFrameNr] = 'ES';
-        g_targetFrames.push(g_currentFrameNr);
         g_currentTargetFrameIndex = g_targetFrames.length-1;
-        g_targetFrames.sort(function(a, b){return a-b});
     });
 
     $('#copyAnnotation').click(function() {
@@ -207,9 +197,6 @@ function setupSegmentation() {
         redrawSequence();
     });
 
-    $(document).on('keyup keydown', function(event) {
-        g_shiftKeyPressed = event.shiftKey;
-    });
 
     // Set first label active
     changeLabel(g_labelButtons[0].id);
@@ -287,6 +274,10 @@ function createMotionModeCanvas() {
 
 
 function addControlPointsForNewFrame(frameNr) {
+    if(!(g_targetFrames.includes(frameNr))) { // Target frame must be created first!
+        alert('You can only add annotations to target frame. Select a target frame or create a new one.');
+        return;
+    }
     if(frameNr in g_controlPoints) // Already exists
         return;
     g_controlPoints[frameNr] = {};
