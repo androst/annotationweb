@@ -83,19 +83,27 @@ class ClassificationExporter(Exporter):
                                                            image_annotation__rejected=False)
         for labeled_image in labeled_images:
             image_sequence = ImageSequence.objects.get(id=labeled_image.image_annotation.image_id)
-            filepath = image_sequence.format.replace('#', str(image_sequence.id))
+            filepath = image_sequence.format.replace('#', str(labeled_image.frame_nr))
             dataset_path = os.path.join(path, labeled_image.image_annotation.task.dataset.get().name)
             try:
-                os.mkdir(dataset_path) # Make dataset path if doesn't exist
+                os.mkdir(dataset_path)  # Make dataset path if it doesn't exist
             except:
                 pass
 
             # Get image label
             label = ImageLabel.objects.get(image=labeled_image)
 
-            image_id = labeled_image.image_annotation.image_id
+            sequence_path, image_filename = os.path.split(filepath)
+            subject_path, sequence_name = os.path.split(sequence_path)
+            _, subject_name = os.path.split(subject_path)
+            new_filepath = os.path.join(dataset_path, subject_name, sequence_name)
             new_extension = form.cleaned_data['output_image_format']
-            new_filename = os.path.join(dataset_path, str(image_id) + '.' + new_extension)
+            new_filename = os.path.join(new_filepath, os.path.splitext(image_filename)[0] + '.' + new_extension)
+            try:
+                os.makedirs(new_filepath)
+            except:
+                return False, 'Failed to create directory at ' + new_filepath
+
             copy_image(filepath, new_filename, label={'id': str(labelDict[label.label.name]), 'name': label.label.name})
 
             file_list.write(new_filename + ' ' + str(labelDict[label.label.name]) + '\n')
