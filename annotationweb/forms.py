@@ -29,7 +29,7 @@ class TaskForm(forms.ModelForm):
             else:
                 pass
         else:
-            data = None
+            data = ''
 
         # Always return a value to use as the new cleaned data, even if
         # this method didn't change it.
