@@ -84,10 +84,21 @@ class MetaImage:
             self.dim_size = (int(dims[0]), int(dims[1]), int(dims[2]))
 
         self.ndims = int(self.attributes['NDims'])
+
+        # Infer number of channels from data size if not explicitly set
+        expected_pixels = self.dim_size[0] * self.dim_size[1]
+        if expected_pixels > 0 and self.data.size != expected_pixels and self.get_channels() == 1:
+            inferred_channels = self.data.size // expected_pixels
+            if inferred_channels * expected_pixels == self.data.size:
+                self.attributes['ElementNumberOfChannels'] = inferred_channels
+
         if self.get_channels() == 1:
             self.data = self.data.reshape((self.dim_size[1], self.dim_size[0]))
         else:
-            self.data = self.data.reshape((self.dim_size[1], self.dim_size[0], self.get_channels()))
+            # MetaImage stores multi-channel data in planar order (all ch0, then ch1, ...)
+            self.data = self.data.reshape(
+                (self.get_channels(), self.dim_size[1], self.dim_size[0])
+            ).transpose(1, 2, 0)
 
     def get_size(self):
         return self.dim_size
