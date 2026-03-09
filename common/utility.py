@@ -67,7 +67,10 @@ def copy_image(filename, new_filename, label=None):
     elif original_extension.lower() == '.png':
         if new_extension.lower() == '.mhd':
             pil_image = PIL.Image.open(filename)
-            metaimage = MetaImage(data=np.asarray(pil_image))
+            pil_data = np.asarray(pil_image)
+            metaimage = MetaImage(
+                data=pil_data, channels=(pil_image.mode == 'RGB')
+            )
             if label is not None:
                 metaimage.set_attribute('LabelId', label['id'])
                 metaimage.set_attribute('LabelName', label['name'])

@@ -76,15 +76,6 @@ class MetaImage:
             # Read uncompressed raw file (.raw)
             self.data = np.fromfile(os.path.join(base_path, self.attributes['ElementDataFile']), dtype=np.uint8)
 
-        # TODO: are L80-84 a duplicate of L55-59?
-        dims = self.attributes['DimSize'].split(' ')
-        if len(dims) == 2:
-            self.dim_size = (int(dims[0]), int(dims[1]))
-        elif len(dims) == 3:
-            self.dim_size = (int(dims[0]), int(dims[1]), int(dims[2]))
-
-        self.ndims = int(self.attributes['NDims'])
-
         # Infer number of channels from data size if not explicitly set
         expected_pixels = self.dim_size[0] * self.dim_size[1]
         if expected_pixels > 0 and self.data.size != expected_pixels and self.get_channels() == 1:
@@ -95,10 +86,9 @@ class MetaImage:
         if self.get_channels() == 1:
             self.data = self.data.reshape((self.dim_size[1], self.dim_size[0]))
         else:
-            # MetaImage stores multi-channel data in planar order (all ch0, then ch1, ...)
             self.data = self.data.reshape(
-                (self.get_channels(), self.dim_size[1], self.dim_size[0])
-            ).transpose(1, 2, 0)
+                (self.dim_size[1], self.dim_size[0], self.get_channels())
+            )
 
     def get_size(self):
         return self.dim_size
@@ -161,7 +151,7 @@ class MetaImage:
         raw_filename = filename[:filename.rfind('.')]
         raw_filename += '.zraw' if compress else '.raw'
 
-        raw_data = np.vstack(self.data).tobytes()
+        raw_data = self.data.tobytes()
         # Write meta image file
         with open(base_path + filename, 'w') as f:
             f.write('NDims = ' + str(self.ndims) + '\n')
