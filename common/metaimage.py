@@ -87,8 +87,8 @@ class MetaImage:
             self.data = self.data.reshape((self.dim_size[1], self.dim_size[0]))
         else:
             self.data = self.data.reshape(
-                (self.dim_size[1], self.dim_size[0], self.get_channels())
-            )
+                (self.get_channels(), self.dim_size[1], self.dim_size[0])
+            ).transpose(1, 2, 0)
 
     def get_size(self):
         return self.dim_size
@@ -151,7 +151,10 @@ class MetaImage:
         raw_filename = filename[:filename.rfind('.')]
         raw_filename += '.zraw' if compress else '.raw'
 
-        raw_data = self.data.tobytes()
+        if self.get_channels() > 1:
+            raw_data = self.data.transpose(2, 0, 1).tobytes()
+        else:
+            raw_data = self.data.tobytes()
         # Write meta image file
         with open(base_path + filename, 'w') as f:
             f.write('NDims = ' + str(self.ndims) + '\n')
